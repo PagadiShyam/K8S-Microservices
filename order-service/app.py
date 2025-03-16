@@ -1,6 +1,6 @@
-# order_service/app.py
 from flask import Flask, request, jsonify
 from confluent_kafka import Producer
+import json
 import os
 
 app = Flask(__name__)
@@ -11,7 +11,14 @@ producer = Producer({'bootstrap.servers': kafka_broker})
 def create_order():
     order_data = request.json
     order_id = order_data.get('id')
-    producer.produce('orders', key=order_id, value=str(order_data))
+    
+    # Ensure valid JSON with double quotes
+    try:
+        json_payload = json.dumps(order_data, indent=2)
+    except TypeError as e:
+        return jsonify({"error": f"Invalid order data: {str(e)}"}), 400
+    
+    producer.produce('orders', key=str(order_id), value=json_payload)
     producer.flush()
     return jsonify({"status": "Order created", "order_id": order_id})
 

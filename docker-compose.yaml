@@ -1,22 +1,38 @@
-version: '3'
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.2
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: echo stat | nc localhost 2181 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   kafka:
     image: confluentinc/cp-kafka:7.3.2
     depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
+      zookeeper:
+        condition: service_healthy
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT_INTERNAL:PLAINTEXT,PLAINTEXT_EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT_INTERNAL://0.0.0.0:9092,PLAINTEXT_EXTERNAL://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT_INTERNAL://kafka:9092,PLAINTEXT_EXTERNAL://localhost:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    ports:
+      - "9092:9092"  # Internal (container-to-container)
+      - "9093:9093"  # External (host-to-container)
+    healthcheck:
+      test: nc -z kafka 9092 || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   order-service:
     build: ./order-service
@@ -24,6 +40,9 @@ services:
       - "5000:5000"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
 
   payment-service:
     build: ./payment-service
@@ -31,6 +50,9 @@ services:
       - "5001:5001"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
 
   notification-service:
     build: ./notification-service
@@ -38,3 +60,6 @@ services:
       - "5002:5002"
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy

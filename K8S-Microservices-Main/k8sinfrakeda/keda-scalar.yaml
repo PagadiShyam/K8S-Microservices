@@ -1,0 +1,17 @@
+# keda-scaler.yaml
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: payment-service-scaler
+spec:
+  scaleTargetRef:
+    name: payment-service
+  minReplicaCount: 1
+  maxReplicaCount: 5
+  triggers:
+  - type: kafka
+    metadata:
+      topic: orders
+      bootstrapServers: my-kafka-kafka-bootstrap.kafka.svc.cluster.local:9092
+      consumerGroup: payment-group
+      lagThreshold: "5"
